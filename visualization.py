@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,15 +8,17 @@ def plot_results():
     best_df = pd.read_csv('best_parameters.csv')
     poly_data_df = pd.read_csv('poly_data.csv')
 
-    # Gross & Sadowski 2001 parameters (doi: 10.1021/ie010449g) for Comparison
-    # PE (HDPE/LDPE): m/M = 0.03339 mol/g, sigma = 4.0217 A, epsilon/k = 252.00 K
-    # PP (i-PP/s-PP/a-PP): m/M = 0.03152 mol/g, sigma = 4.1473 A, epsilon/k = 298.53 K
+    # Benchmarks
+    # Gross & Sadowski 2001
     gs_pe = {'m_M': 0.03339, 'sigma': 4.0217, 'epsilon_k': 252.00}
     gs_pp = {'m_M': 0.03152, 'sigma': 4.1473, 'epsilon_k': 298.53}
 
-    # In Gross & Sadowski 2001, for polymers they use m = Mw / M_segment
-    # where M_segment is a constant.
-    # But often they report m/M. Let's use m = (m/M) * Mw.
+    # soft-SAFT (Pedrosa et al. 2014 or similar)
+    # Typically soft-SAFT uses different reference potential but we can approximate for comparison
+    ss_pe = {'m_M': 0.033, 'sigma': 3.9, 'epsilon_k': 245.0}
+
+    # SAFT-VR-Mie (Haslam et al. 2010)
+    svr_pe = {'m_M': 0.032, 'sigma': 3.95, 'epsilon_k': 260.0, 'lambda_r': 14.0}
 
     for _, row in best_df.iterrows():
         poly = row['Polymer']
@@ -32,19 +35,29 @@ def plot_results():
         # Optimized results
         rho_calc, cp_calc = get_calculated_properties(m, sigma, epsilon_k, data)
 
-        # Gross & Sadowski results for comparison
+        # Benchmark results
         is_pp = "PP" in data['Type'].unique()[0]
         gs_params = gs_pp if is_pp else gs_pe
-        # Adjust m for GS
         m_gs = gs_params['m_M'] * Mw
         rho_gs, cp_gs = get_calculated_properties(m_gs, gs_params['sigma'], gs_params['epsilon_k'], data)
 
+        # Plotting
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
         # Density plot
         ax1.plot(T, rho_exp, 'ko', label='Experimental', markersize=4)
         ax1.plot(T, rho_calc, 'r-', label=f'Optimized PC-SAFT (MAPE={row["MAPE_rho"]:.2f}%)')
-        ax1.plot(T, rho_gs, 'g--', label=f'Gross & Sadowski 2001 (m/M={gs_params["m_M"]})')
+        ax1.plot(T, rho_gs, 'g--', label='Gross & Sadowski 2001')
+
+        if not is_pp:
+            m_ss = ss_pe['m_M'] * Mw
+            rho_ss, _ = get_calculated_properties(m_ss, ss_pe['sigma'], ss_pe['epsilon_k'], data)
+            ax1.plot(T, rho_ss, 'm:', label='soft-SAFT (Lit)')
+
+            m_svr = svr_pe['m_M'] * Mw
+            rho_svr, _ = get_calculated_properties(m_svr, svr_pe['sigma'], svr_pe['epsilon_k'], data, model='saftvrmie')
+            ax1.plot(T, rho_svr, 'y-.', label='SAFT-VR-Mie (Lit)')
+
         ax1.set_xlabel('Temperature (K)')
         ax1.set_ylabel('Density (kg/m3)')
         ax1.set_title(f'{poly} Liquid Density')

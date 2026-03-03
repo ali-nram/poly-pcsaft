@@ -51,13 +51,25 @@ if __name__ == "__main__":
     results_df = run_weight_study()
     results_df.to_csv('weight_study_results.csv', index=False)
 
-    # Analyze best results for each polymer
+    # Hierarchical Selection Ladder: Density > Heat Capacity > Total MAPE
+    # Criteria:
+    # 1. MAPE_rho < 0.5% (Pseudo-experimental limit)
+    # 2. Minimum MAPE_cp
+    # 3. Minimum MAPE_total
+
     best_results = []
     for poly in results_df['Polymer'].unique():
-        poly_res = results_df[results_df['Polymer'] == poly]
-        # "lowest possible MAPE for density, MAPE for heat capacity and total MAPE (sum of the previous two)"
-        # We'll pick the one with lowest MAPE_total for now as a surrogate.
-        best = poly_res.loc[poly_res['MAPE_total'].idxmin()]
+        poly_res = results_df[results_df['Polymer'] == poly].copy()
+
+        # Priority 1: Density MAPE < 0.5%
+        qualified = poly_res[poly_res['MAPE_rho'] < 0.5]
+
+        if qualified.empty:
+            # If none meet 0.5%, take the top 3 with lowest MAPE_rho
+            qualified = poly_res.nsmallest(3, 'MAPE_rho')
+
+        # Priority 2: From qualified, pick lowest MAPE_cp
+        best = qualified.loc[qualified['MAPE_cp'].idxmin()]
         best_results.append(best)
 
     best_df = pd.DataFrame(best_results)
